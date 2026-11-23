@@ -67,6 +67,7 @@ def trigger_fyers_historical_download(payload: HistoricalDownloadRequest) -> Res
             content={
                 "error": outcome["error_code"],
                 "message": outcome["message"],
+                "auth_diagnostic": outcome.get("auth_diagnostic"),
                 "download_run": outcome["download_run"],
                 "data_quality_report": outcome.get("data_quality_report"),
                 "correlation_id": get_correlation_id(),
@@ -171,3 +172,4 @@ def delete_historical_dataset(
     cfg = get_settings()
     with unit_of_work(settings=cfg) as session:
         return HistoricalDatasetService.delete_dataset(session, dataset_id, actor=actor)
+

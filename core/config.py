@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core.exceptions import ConfigurationSafetyError
@@ -42,10 +42,12 @@ class AppSettings(BaseSettings):
     FYERS_HISTORICAL_DATA_ENABLED: bool = True
     FYERS_CLIENT_ID: str = Field(
         default="",
+        validation_alias=AliasChoices("FYERS_CLIENT_ID", "FYERS_APP_ID"),
         description="FYERS API v3 App ID / Client ID (e.g. XXXXXXXX-100) for historical OHLCV queries only.",
     )
     FYERS_SECRET_KEY: str = Field(
         default="",
+        validation_alias=AliasChoices("FYERS_SECRET_KEY", "FYERS_APP_SECRET"),
         description="Optional FYERS App Secret (never exposed via API/UI/logs; used only if generating OAuth tokens).",
     )
     FYERS_REDIRECT_URI: str = Field(
@@ -58,10 +60,12 @@ class AppSettings(BaseSettings):
     )
     FYERS_USER_ID: str = Field(
         default="",
+        validation_alias=AliasChoices("FYERS_USER_ID", "FYERS_ID", "FY_ID"),
         description="Optional FYERS User ID (fy_id) for backend headless TOTP token generation.",
     )
     FYERS_TOTP_SECRET: str = Field(
         default="",
+        validation_alias=AliasChoices("FYERS_TOTP_SECRET", "FYERS_TOTP_KEY"),
         description="Optional Base32 TOTP 2FA secret key for backend headless token generation (never logged/exposed).",
     )
     FYERS_PIN: str = Field(
@@ -280,6 +284,33 @@ class AppSettings(BaseSettings):
         if self.fyers_static_token_configured:
             return "STATIC_ACCESS_TOKEN"
         return "UNCONFIGURED"
+
+    @property
+    def fyers_env_presence(self) -> dict[str, bool]:
+        """Boolean-only checklist of which FYERS env vars are populated on backend (NEVER values)."""
+        return {
+            "FYERS_CLIENT_ID": self._is_populated_non_placeholder(self.FYERS_CLIENT_ID),
+            "FYERS_SECRET_KEY": self._is_populated_non_placeholder(self.FYERS_SECRET_KEY),
+            "FYERS_REDIRECT_URI": self._is_populated_non_placeholder(self.FYERS_REDIRECT_URI),
+            "FYERS_USER_ID": self._is_populated_non_placeholder(self.FYERS_USER_ID),
+            "FYERS_TOTP_SECRET": self._is_populated_non_placeholder(self.FYERS_TOTP_SECRET),
+            "FYERS_PIN": self._is_populated_non_placeholder(self.FYERS_PIN),
+            "FYERS_ACCESS_TOKEN": self._is_populated_non_placeholder(self.FYERS_ACCESS_TOKEN),
+        }
+
+    @property
+    def fyers_missing_totp_vars(self) -> list[str]:
+        """Return names of any missing required env vars for 6-variable Headless TOTP mode."""
+        pres = self.fyers_env_presence
+        required = (
+            "FYERS_CLIENT_ID",
+            "FYERS_SECRET_KEY",
+            "FYERS_REDIRECT_URI",
+            "FYERS_USER_ID",
+            "FYERS_TOTP_SECRET",
+            "FYERS_PIN",
+        )
+        return [k for k in required if not pres.get(k, False)]
 
     @property
     def fyers_token_configured(self) -> bool:

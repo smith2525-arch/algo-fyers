@@ -38,9 +38,24 @@ from core.exceptions import (
 from core.market_data.provider import sanitize_provider_error_text
 
 FYERS_TOTP_AUTH_FAILED_MESSAGE = (
-    "FYERS historical-data authentication requires renewal (headless TOTP login failed or was "
-    "rejected). Existing stored and uploaded datasets remain available."
+    "FYERS historical-data authentication requires renewal. "
+    "Existing stored and uploaded datasets remain available."
 )
+
+_BROWSER_LIKE_HEADERS: dict[str, str] = {
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+}
+
+
+def _raise_totp_step_auth_error(step_diagnostic: str) -> None:
+    err = FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+    err.diagnostic = step_diagnostic  # type: ignore[attr-defined]
+    raise err
 
 
 def _b64_encode_ascii(value: str) -> str:
@@ -67,7 +82,9 @@ def generate_rfc6238_totp(
     try:
         key_bytes = base64.b32decode(cleaned, casefold=True)
     except (binascii.Error, ValueError) as exc:
-        raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE) from exc
+        err = FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+        err.diagnostic = "FYERS_TOTP_SECRET is not a valid Base32-encoded 2FA secret key."  # type: ignore[attr-defined]
+        raise err from exc
 
     now_sec = int(time.time() if unix_time is None else unix_time)
     if now_sec < 0:
@@ -256,8 +273,11 @@ class FyersTotpAuthenticator:
         allowed_statuses: frozenset[int] = frozenset({200}),
         step_label: str,
     ) -> dict[str, Any]:
+        merged_headers = dict(_BROWSER_LIKE_HEADERS)
+        if headers:
+            merged_headers.update(headers)
         try:
-            resp = client.post(url, json=payload, headers=headers)
+            resp = client.post(url, json=payload, headers=merged_headers)
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             raise HistoricalProviderUnavailableError(
                 f"FYERS authentication gateway unreachable during {step_label}. "
@@ -282,13 +302,20 @@ class FyersTotpAuthenticator:
         try:
             body = resp.json()
         except ValueError as exc:
-            raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE) from exc
+            _raise_totp_step_auth_error(
+                f"Headless TOTP failed at {step_label} (HTTP {resp.status_code}: non-JSON gateway response; "
+                "check if Cloudflare blocked datacenter IP or verify endpoint)."
+            )
+            raise AssertionError from exc
 
         if not isinstance(body, dict) or resp.status_code not in allowed_statuses:
-            _ = sanitize_provider_error_text(
-                str(body), extra_secrets=self._redaction_secrets()
+            safe_msg = sanitize_provider_error_text(
+                str(body.get("message") if isinstance(body, dict) else body),
+                extra_secrets=self._redaction_secrets(),
             )
-            raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+            _raise_totp_step_auth_error(
+                f"Headless TOTP failed at {step_label} (HTTP {resp.status_code}): {safe_msg}"
+            )
 
         return body
 
@@ -323,22 +350,26 @@ class FyersTotpAuthenticator:
                 client,
                 f"{self._vagator_base}/send_login_otp_v2",
                 payload={"fy_id": b64_fy_id, "app_id": "2"},
-                step_label="send_login_otp_v2",
+                step_label="step 1 (send_login_otp_v2)",
             )
             req_key_1 = str(step1.get("request_key") or "").strip()
             if str(step1.get("s", "")).lower() != "ok" or not req_key_1:
-                raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+                _raise_totp_step_auth_error(
+                    "Headless TOTP failed at step 1 (send_login_otp_v2): verify FYERS_USER_ID (fy_id)."
+                )
 
             # Step 2: verify_otp (TOTP)
             step2 = self._post_json_step(
                 client,
                 f"{self._vagator_base}/verify_otp",
                 payload={"request_key": req_key_1, "otp": otp_code},
-                step_label="verify_otp",
+                step_label="step 2 (verify_otp)",
             )
             req_key_2 = str(step2.get("request_key") or "").strip()
             if str(step2.get("s", "")).lower() != "ok" or not req_key_2:
-                raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+                _raise_totp_step_auth_error(
+                    "Headless TOTP failed at step 2 (verify_otp): TOTP rejected — verify FYERS_TOTP_SECRET Base32 key."
+                )
 
             # Step 3: verify_pin_v2
             step3 = self._post_json_step(
@@ -349,14 +380,16 @@ class FyersTotpAuthenticator:
                     "identity_type": "pin",
                     "identifier": b64_pin,
                 },
-                step_label="verify_pin_v2",
+                step_label="step 3 (verify_pin_v2)",
             )
             data3 = step3.get("data")
             intermediate_token = (
                 str(data3.get("access_token") or "").strip() if isinstance(data3, dict) else ""
             )
             if str(step3.get("s", "")).lower() != "ok" or not intermediate_token:
-                raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+                _raise_totp_step_auth_error(
+                    "Headless TOTP failed at step 3 (verify_pin_v2): PIN rejected — verify FYERS_PIN."
+                )
 
             # Step 4: /api/v3/token -> extract OAuth auth_code from redirect Url (HTTP 200 or 308)
             step4 = self._post_json_step(
@@ -376,32 +409,60 @@ class FyersTotpAuthenticator:
                 },
                 headers={"Authorization": f"Bearer {intermediate_token}"},
                 allowed_statuses=frozenset({200, 308}),
-                step_label="v3_token",
+                step_label="step 4 (v3_token)",
             )
             redirect_target = str(step4.get("Url") or step4.get("url") or "").strip()
             if not redirect_target:
-                raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+                _raise_totp_step_auth_error(
+                    "Headless TOTP failed at step 4 (v3_token): no redirect Url returned — "
+                    "verify FYERS_CLIENT_ID and FYERS_REDIRECT_URI match your FYERS developer app."
+                )
 
             parsed_q = parse_qs(urlparse(redirect_target).query)
             auth_codes = parsed_q.get("auth_code") or []
             auth_code = str(auth_codes[0]).strip() if auth_codes else ""
             if not auth_code:
-                raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+                _raise_totp_step_auth_error(
+                    "Headless TOTP failed at step 4 (v3_token): redirect Url missing auth_code."
+                )
 
             # Step 5: /api/v3/validate-authcode -> final daily access_token
-            step5 = self._post_json_step(
-                client,
-                f"{self._auth_v3_base}/validate-authcode",
-                payload={
-                    "grant_type": "authorization_code",
-                    "appIdHash": app_id_hash,
-                    "code": auth_code,
-                },
-                step_label="validate_authcode",
-            )
-            final_token = str(step5.get("access_token") or "").strip()
-            if str(step5.get("s", "")).lower() != "ok" or not final_token:
-                raise FyersAuthenticationRequiredError(FYERS_TOTP_AUTH_FAILED_MESSAGE)
+            # If user omitted '-100' suffix in FYERS_CLIENT_ID, auto-try f'{client_id}-100' if bare hash fails
+            candidate_app_ids = [client_id]
+            if "-" not in client_id:
+                candidate_app_ids.append(f"{client_id}-100")
+
+            final_token = ""
+            for cand_cid in candidate_app_ids:
+                cand_hash = hashlib.sha256(f"{cand_cid}:{secret_key}".encode("utf-8")).hexdigest()
+                try:
+                    step5 = self._post_json_step(
+                        client,
+                        f"{self._auth_v3_base}/validate-authcode",
+                        payload={
+                            "grant_type": "authorization_code",
+                            "appIdHash": cand_hash,
+                            "code": auth_code,
+                        },
+                        step_label="step 5 (validate_authcode)",
+                    )
+                    tok = str(step5.get("access_token") or "").strip()
+                    if str(step5.get("s", "")).lower() == "ok" and tok:
+                        final_token = (
+                            f"{cand_cid}:{tok}" if (cand_cid != client_id and ":" not in tok) else tok
+                        )
+                        break
+                except FyersAuthenticationRequiredError:
+                    if cand_cid == candidate_app_ids[-1]:
+                        _raise_totp_step_auth_error(
+                            "Headless TOTP failed at step 5 (validate_authcode): appIdHash rejected — "
+                            "verify FYERS_CLIENT_ID (e.g. XXXXX-100) and FYERS_SECRET_KEY."
+                        )
+
+            if not final_token:
+                _raise_totp_step_auth_error(
+                    "Headless TOTP failed at step 5 (validate_authcode): no access_token returned."
+                )
 
             return final_token
 

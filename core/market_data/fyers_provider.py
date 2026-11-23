@@ -186,7 +186,13 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
             minted_token = totp_auth.get_or_mint_access_token(force_refresh=force_totp_refresh)
             return self._format_client_token_header(raw_cid, minted_token)
 
-        raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
+        missing = self._cfg.fyers_missing_totp_vars
+        err = FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
+        err.diagnostic = (  # type: ignore[attr-defined]
+            f"Missing backend environment variables on API service: {', '.join(missing)} "
+            "(or supply FYERS_CLIENT_ID + FYERS_ACCESS_TOKEN)."
+        )
+        raise err
 
     def provider_status(self) -> dict[str, Any]:
         """Return strictly sanitized provider readiness (never exposes tokens or client secrets)."""
@@ -220,6 +226,8 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
             "enabled": enabled,
             "credentials_configured": configured,
             "auth_mode": auth_mode,
+            "env_checklist": self._cfg.fyers_env_presence,
+            "missing_totp_vars": self._cfg.fyers_missing_totp_vars,
             "status": status_code,
             "message": message,
             "max_date_range_days": self._cfg.FYERS_MAX_DATE_RANGE_DAYS,

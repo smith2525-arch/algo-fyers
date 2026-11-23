@@ -978,11 +978,28 @@ class HistoricalDatasetService:
                 reference_now=reference_now,
                 on_chunk_completed=_on_chunk_ok,
             )
-        except FyersAuthenticationRequiredError:
+        except FyersAuthenticationRequiredError as exc:
+            raw_diag = getattr(exc, "diagnostic", None)
+            safe_diag = (
+                sanitize_provider_error_text(
+                    str(raw_diag),
+                    extra_secrets=(
+                        cfg.FYERS_ACCESS_TOKEN,
+                        cfg.FYERS_SECRET_KEY,
+                        cfg.FYERS_CLIENT_ID,
+                        cfg.FYERS_USER_ID,
+                        cfg.FYERS_TOTP_SECRET,
+                        cfg.FYERS_PIN,
+                    ),
+                )
+                if raw_diag
+                else None
+            )
             run_row.status = DataQualityStatus.AUTHENTICATION_REQUIRED.value
             run_row.quality_status = DataQualityStatus.AUTHENTICATION_REQUIRED.value
             run_row.error_code = "FYERS_AUTHENTICATION_REQUIRED"
             run_row.error_message = FYERS_AUTH_RENEWAL_UI_MESSAGE
+            run_row.details_json = {"auth_diagnostic": safe_diag} if safe_diag else {}
             run_row.completed_at = now_ist()
             session.flush()
 
@@ -998,13 +1015,18 @@ class HistoricalDatasetService:
                 entity_type="historical_download_run",
                 entity_id=run_code,
                 source="fyers.historical_provider",
-                details={**audit_base, "status": "FYERS_AUTHENTICATION_REQUIRED"},
+                details={
+                    **audit_base,
+                    "status": "FYERS_AUTHENTICATION_REQUIRED",
+                    "auth_diagnostic": safe_diag,
+                },
             )
             return {
                 "ok": False,
                 "http_status": 401,
                 "error_code": "FYERS_AUTHENTICATION_REQUIRED",
                 "message": FYERS_AUTH_RENEWAL_UI_MESSAGE,
+                "auth_diagnostic": safe_diag,
                 "download_run": HistoricalDatasetService._serialize_download_run(run_row),
                 "dataset": None,
                 "data_quality_report": None,

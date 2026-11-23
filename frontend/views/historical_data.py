@@ -102,6 +102,14 @@ def _render_fyers_ingestion_panel(
         return
 
     if status_code == "FYERS_AUTHENTICATION_REQUIRED":
+        missing_vars: list[str] = fyers_status.get("missing_totp_vars") or []
+        missing_note = (
+            f"<div class='control-bar-note mono' style='margin-top:0.22rem; color:#CBD5E1;'>"
+            f"Backend env vars not yet set on API service: <strong>{html.escape(', '.join(missing_vars))}</strong>"
+            f"</div>"
+            if missing_vars
+            else ""
+        )
         st.markdown(
             f"""
             <div class="control-bar" style="border-left-color:#F59E0B; border-color:#F59E0B;">
@@ -111,6 +119,7 @@ def _render_fyers_ingestion_panel(
                 <div class="control-bar-note" style="color:#FDE68A;">
                     FYERS historical-data authentication requires renewal. Existing stored and uploaded datasets remain available.
                 </div>
+                {missing_note}
             </div>
             """,
             unsafe_allow_html=True,
@@ -222,10 +231,19 @@ def _render_fyers_ingestion_panel(
                 else "DOWNLOAD_ERROR"
             )
             if err_code == "FYERS_AUTHENTICATION_REQUIRED" or res.status_code == 401:
-                st.warning(
+                diag = (
+                    res.data.get("auth_diagnostic")
+                    if isinstance(res.data, dict)
+                    else None
+                )
+                base_warn = (
                     "FYERS historical-data authentication requires renewal. "
                     "Existing stored and uploaded datasets remain available."
                 )
+                if diag:
+                    st.warning(f"{base_warn}\n\nDiagnostic: {diag}")
+                else:
+                    st.warning(base_warn)
             else:
                 st.error(res.error or "Historical data download failed.")
 
@@ -627,3 +645,4 @@ def render(client: ControlCenterApiClient) -> None:
         dq_res = client.get_historical_dataset_quality(sel_ds_id)
         if dq_res.ok and isinstance(dq_res.data, dict):
             _render_quality_detail_panel(sel_ds_id, dq_res.data)
+
