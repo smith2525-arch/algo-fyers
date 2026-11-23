@@ -1,0 +1,600 @@
+/* ============================================================================
+   ALGO TRADING CONTROL CENTER — INSTITUTIONAL TRADING TERMINAL STYLESHEET
+   Palette: Deep Navy/Charcoal (#0A0F1A / #101827), Crisp Slate Borders (#1E293B)
+   Semantic: Emerald (#10B981), Crimson (#EF4444), Amber (#F59E0B), Cobalt (#2563EB)
+   ============================================================================ */
+
+/* Hide generic Streamlit consumer chrome while keeping sidebar toggle accessible */
+#MainMenu,
+footer,
+div[data-testid="stDecoration"] {
+    visibility: hidden !important;
+    height: 0 !important;
+}
+
+/* Custom dark institutional scrollbars */
+::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+::-webkit-scrollbar-track {
+    background: #0A0F1A;
+}
+::-webkit-scrollbar-thumb {
+    background: #1E293B;
+    border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+}
+
+/* Tight layout margins — eliminate generic Streamlit whitespace */
+.block-container {
+    padding-top: 0.65rem !important;
+    padding-bottom: 1.25rem !important;
+    padding-left: 1.20rem !important;
+    padding-right: 1.20rem !important;
+    max-width: 100% !important;
+}
+
+header[data-testid="stHeader"] {
+    background: #0A0F1A !important;
+    height: 1.7rem !important;
+}
+
+section[data-testid="stSidebar"] {
+    background-color: #0B111E !important;
+    border-right: 1px solid #1E293B !important;
+}
+
+section[data-testid="stSidebar"] .block-container {
+    padding-top: 0.70rem !important;
+    padding-left: 0.80rem !important;
+    padding-right: 0.80rem !important;
+}
+
+/* Sidebar radio navigation styled as institutional EMS desk menu */
+section[data-testid="stSidebar"] div[role="radiogroup"] > label {
+    background: #0E1626;
+    border: 1px solid #162238;
+    border-radius: 3px;
+    padding: 0.28rem 0.55rem !important;
+    margin-bottom: 3px !important;
+    font-family: "Consolas", "SFMono-Regular", "Menlo", monospace !important;
+    font-size: 0.78rem !important;
+    letter-spacing: 0.02em;
+    transition: all 0.12s ease;
+}
+
+section[data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+    background: #162238;
+    border-color: #3B82F6;
+}
+
+section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+    background: linear-gradient(90deg, #172554 0%, #111C33 100%) !important;
+    border-color: #3B82F6 !important;
+    border-left: 3px solid #60A5FA !important;
+    color: #F8FAFC !important;
+    font-weight: 700 !important;
+}
+
+/* Persistent Safety Mode Banner */
+.paper-safety-banner {
+    background: linear-gradient(90deg, #172033 0%, #172554 50%, #172033 100%);
+    border: 1px solid #2563EB;
+    border-left: 4px solid #F59E0B;
+    color: #F8FAFC;
+    padding: 0.36rem 0.85rem;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: "Consolas", "SFMono-Regular", "Menlo", monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    margin-bottom: 0.52rem;
+}
+
+.paper-safety-banner .banner-tag {
+    color: #FBBF24;
+    background: rgba(245, 158, 11, 0.14);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    padding: 0.1rem 0.45rem;
+    border-radius: 2px;
+    font-size: 0.69rem;
+}
+
+/* Guided Consulting Demo Presenter Ribbon */
+.demo-ribbon {
+    background: linear-gradient(90deg, #0F172A 0%, #13203B 55%, #0F172A 100%);
+    border: 1px solid #38BDF8;
+    border-left: 4px solid #38BDF8;
+    border-radius: 2px;
+    padding: 0.48rem 0.80rem;
+    margin-bottom: 0.55rem;
+}
+
+.demo-ribbon-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.25rem;
+}
+
+.demo-ribbon-title {
+    font-family: "Consolas", monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #F8FAFC;
+    letter-spacing: 0.04em;
+}
+
+.demo-ribbon-note {
+    font-size: 0.74rem;
+    color: #CBD5E1;
+    line-height: 1.35;
+}
+
+/* Terminal Top Header Bar */
+.terminal-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid #1E293B;
+    padding-bottom: 0.38rem;
+    margin-bottom: 0.58rem;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.terminal-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #F1F5F9;
+    margin: 0;
+}
+
+.terminal-subtitle {
+    font-family: "Consolas", "SFMono-Regular", monospace;
+    font-size: 0.72rem;
+    color: #94A3B8;
+}
+
+/* Dense 7-Column KPI Strip */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.42rem;
+    margin-bottom: 0.55rem;
+}
+
+@media (max-width: 1280px) {
+    .kpi-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.kpi-cell {
+    background: #101827;
+    border: 1px solid #1E293B;
+    border-top: 2px solid #24324B;
+    border-radius: 2px;
+    padding: 0.44rem 0.58rem;
+}
+
+.kpi-label {
+    font-size: 0.67rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94A3B8;
+    margin-bottom: 0.18rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.kpi-demo-pill {
+    font-size: 0.59rem;
+    color: #FBBF24;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    padding: 0 0.28rem;
+    border-radius: 2px;
+    font-family: "Consolas", monospace;
+}
+
+.kpi-value {
+    font-family: "Consolas", "SFMono-Regular", monospace;
+    font-size: 0.94rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #F8FAFC;
+    text-align: right;
+}
+
+/* Subsystem Status Strip (auto-fits both 5-component Dashboard and 9-component System Health) */
+.status-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 0.42rem;
+    margin-bottom: 0.62rem;
+}
+
+.status-cell {
+    background: #0E1625;
+    border: 1px solid #1E293B;
+    border-radius: 2px;
+    padding: 0.36rem 0.58rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+}
+
+.status-comp-name {
+    font-size: 0.73rem;
+    font-weight: 600;
+    color: #CBD5E1;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+/* Canonical Status Badges */
+.status-badge {
+    font-family: "Consolas", "SFMono-Regular", monospace;
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 0.09rem 0.40rem;
+    border-radius: 2px;
+    display: inline-block;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.badge-healthy {
+    background: rgba(16, 185, 129, 0.14);
+    color: #34D399;
+    border: 1px solid rgba(16, 185, 129, 0.45);
+}
+
+.badge-degraded, .badge-stale, .badge-warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: #FBBF24;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
+.badge-blocked, .badge-critical {
+    background: rgba(239, 68, 68, 0.16);
+    color: #F87171;
+    border: 1px solid rgba(239, 68, 68, 0.50);
+}
+
+.badge-stopped, .badge-info {
+    background: rgba(59, 130, 246, 0.14);
+    color: #60A5FA;
+    border: 1px solid rgba(59, 130, 246, 0.42);
+}
+
+/* Operational Control Bar (STOP PAPER TRADING & Compliance Callouts) */
+.control-bar {
+    background: #111827;
+    border: 1px solid #263449;
+    border-left: 4px solid #10B981;
+    border-radius: 2px;
+    padding: 0.48rem 0.75rem;
+    margin-bottom: 0.62rem;
+}
+
+.control-bar.halted {
+    background: rgba(127, 29, 29, 0.22);
+    border-color: rgba(239, 68, 68, 0.55);
+    border-left: 4px solid #EF4444;
+}
+
+.control-bar-title {
+    font-family: "Consolas", monospace;
+    font-size: 0.77rem;
+    font-weight: 700;
+    color: #F8FAFC;
+}
+
+.control-bar-note {
+    font-size: 0.72rem;
+    color: #94A3B8;
+    margin-top: 0.14rem;
+}
+
+/* Compact Desk Panel */
+.desk-panel {
+    background: #101827;
+    border: 1px solid #1E293B;
+    border-radius: 2px;
+    padding: 0.52rem 0.68rem;
+    margin-bottom: 0.58rem;
+}
+
+.desk-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #1E293B;
+    padding-bottom: 0.30rem;
+    margin-bottom: 0.45rem;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.desk-panel-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #E2E8F0;
+}
+
+.desk-panel-meta {
+    font-family: "Consolas", monospace;
+    font-size: 0.67rem;
+    color: #64748B;
+}
+
+/* Compact Trading Blotter Tables */
+.blotter-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.74rem;
+}
+
+.blotter-table th {
+    background: #0C1322;
+    color: #94A3B8;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.66rem;
+    padding: 0.32rem 0.44rem;
+    border-bottom: 1px solid #1E293B;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.blotter-table th.num,
+.blotter-table td.num {
+    text-align: right;
+    font-family: "Consolas", "SFMono-Regular", monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+.blotter-table td {
+    padding: 0.29rem 0.44rem;
+    border-bottom: 1px solid #162033;
+    color: #E2E8F0;
+    vertical-align: middle;
+}
+
+.blotter-table tr:hover td {
+    background: rgba(30, 41, 59, 0.50);
+}
+
+.mono {
+    font-family: "Consolas", "SFMono-Regular", monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+.num-pos {
+    color: #34D399 !important;
+}
+
+.num-neg {
+    color: #F87171 !important;
+}
+
+.num-flat {
+    color: #CBD5E1 !important;
+}
+
+/* Professional Empty State inside Blotters */
+.empty-state-box {
+    background: #0C1320;
+    border: 1px dashed #24324B;
+    border-radius: 2px;
+    padding: 0.80rem 0.88rem;
+    text-align: left;
+}
+
+.empty-state-title {
+    font-family: "Consolas", monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #CBD5E1;
+    margin-bottom: 0.18rem;
+}
+
+.empty-state-desc {
+    font-size: 0.72rem;
+    color: #64748B;
+    line-height: 1.4;
+}
+
+/* ============================================================================
+   INSTITUTIONAL BUTTON HIERARCHY & DESTRUCTIVE-ACTION EMPHASIS
+   - Constructive Primary: Cobalt Blue (#1D4ED8 -> #2563EB)
+   - Tactical Secondary: Slate Console (#131C2E -> #1E293B)
+   - Destructive / Halt Controls: High-Contrast Crimson (#DC2626 -> #B91C1C)
+   ============================================================================ */
+div[data-testid="stButton"] > button,
+div[data-testid="stFormSubmitButton"] > button {
+    border-radius: 2px !important;
+    font-family: "Consolas", "SFMono-Regular", monospace !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+    min-height: 2.15rem !important;
+    transition: all 0.12s ease !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"],
+div[data-testid="stFormSubmitButton"] > button[kind="primary"] {
+    background-color: #1D4ED8 !important;
+    border: 1px solid #3B82F6 !important;
+    color: #F8FAFC !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"]:hover:not(:disabled),
+div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover:not(:disabled) {
+    background-color: #2563EB !important;
+    border-color: #60A5FA !important;
+}
+
+div[data-testid="stButton"] > button[kind="secondary"],
+div[data-testid="stFormSubmitButton"] > button[kind="secondary"] {
+    background-color: #131C2E !important;
+    border: 1px solid #2D3D59 !important;
+    color: #E2E8F0 !important;
+}
+
+div[data-testid="stButton"] > button[kind="secondary"]:hover:not(:disabled),
+div[data-testid="stFormSubmitButton"] > button[kind="secondary"]:hover:not(:disabled) {
+    background-color: #1E293B !important;
+    border-color: #60A5FA !important;
+    color: #FFFFFF !important;
+}
+
+/* Semantic Crimson Styling for Emergency Halt / Kill Switch / Flatten / Cancel-All */
+div[data-testid="stButton"] > button:not(:disabled):has(p:only-child) {
+    /* keep base styling unless matched below */
+}
+
+div[data-testid="stButton"] > button[kind="primary"].danger-btn,
+div[data-testid="stButton"] > button:not(:disabled)[kind="primary"][title*="Immediately block"],
+div[data-testid="stButton"] > button:not(:disabled)[kind="primary"][title*="Emergency"],
+div[data-testid="stButton"] > button:not(:disabled)[kind="primary"][title*="Liquidate"] {
+    background-color: #DC2626 !important;
+    border-color: #EF4444 !important;
+    color: #FFFFFF !important;
+}
+
+/* Style Streamlit Expanders, Forms, Inputs & Alerts for Dark Trading Desk Consistency */
+details[data-testid="stExpander"] {
+    background: #0E1626 !important;
+    border: 1px solid #1E293B !important;
+    border-radius: 2px !important;
+    margin-bottom: 0.52rem !important;
+}
+
+details[data-testid="stExpander"] > summary {
+    font-family: "Consolas", monospace !important;
+    font-size: 0.76rem !important;
+    font-weight: 700 !important;
+    color: #CBD5E1 !important;
+    padding: 0.42rem 0.65rem !important;
+}
+
+div[data-testid="stForm"] {
+    background: #0E1626 !important;
+    border: 1px solid #1E293B !important;
+    border-radius: 2px !important;
+    padding: 0.65rem 0.75rem !important;
+}
+
+div[data-testid="stNumberInput"] input,
+div[data-testid="stTextInput"] input,
+div[data-testid="stDateInput"] input {
+    font-family: "Consolas", "SFMono-Regular", monospace !important;
+    font-size: 0.78rem !important;
+    border-radius: 2px !important;
+}
+
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+    border-radius: 2px !important;
+    font-size: 0.78rem !important;
+    background-color: #0D1422 !important;
+    border-color: #24324B !important;
+}
+
+div[data-testid="stNumberInput"] label p,
+div[data-testid="stSelectbox"] label p,
+div[data-testid="stTextInput"] label p,
+div[data-testid="stDateInput"] label p,
+div[data-testid="stCheckbox"] label p {
+    font-size: 0.72rem !important;
+    color: #94A3B8 !important;
+    font-weight: 600 !important;
+}
+
+div[data-testid="stAlert"] {
+    border-radius: 2px !important;
+    font-size: 0.76rem !important;
+    padding: 0.45rem 0.75rem !important;
+}
+
+/* Strategy Lab Specification Matrix & Version Diff Highlighting */
+.strategy-summary-strip {
+    background: linear-gradient(180deg, #111B2E 0%, #0D1524 100%);
+    border: 1px solid #24324B;
+    border-left: 4px solid #3B82F6;
+    border-radius: 2px;
+    padding: 0.55rem 0.80rem;
+    margin-bottom: 0.60rem;
+}
+
+.strategy-rule-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-top: 0.42rem;
+}
+
+.strategy-rule-box {
+    background: #0A101D;
+    border: 1px solid #1E293B;
+    border-radius: 2px;
+    padding: 0.34rem 0.50rem;
+    font-family: "Consolas", monospace;
+    font-size: 0.71rem;
+    color: #CBD5E1;
+}
+
+.strategy-rule-box strong {
+    color: #93C5FD;
+    display: block;
+    font-size: 0.66rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.12rem;
+}
+
+.blotter-table tr.diff-changed td {
+    background: rgba(245, 158, 11, 0.10) !important;
+    border-bottom: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.zone-caption {
+    font-family: "Consolas", monospace;
+    font-size: 0.70rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #60A5FA;
+    border-bottom: 1px solid #1E293B;
+    padding-bottom: 0.22rem;
+    margin-bottom: 0.45rem;
+}
+
+/* Compact Streamlit input spacing for trading desk feel */
+div[data-testid="stNumberInput"],
+div[data-testid="stSelectbox"],
+div[data-testid="stTextInput"] {
+    margin-bottom: -0.26rem;
+}
+
+div[data-testid="stTabs"] button[role="tab"] {
+    font-family: "Consolas", monospace !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+}

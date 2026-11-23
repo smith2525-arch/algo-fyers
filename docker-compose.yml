@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-placeholder_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in untracked .env}
+      POSTGRES_DB: ${POSTGRES_DB:-algo_control_center}
+      TZ: Asia/Kolkata
+      PGTZ: Asia/Kolkata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-placeholder_user} -d $${POSTGRES_DB:-algo_control_center}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in untracked .env}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      DB_POOL_MODE: QUEUE
+      EXECUTION_MODE: PAPER_ONLY
+      TIMEZONE: Asia/Kolkata
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "deploy.run_migrations", "--seed"]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-true}
+      EXECUTION_MODE: PAPER_ONLY
+      MARKET_MODE: HISTORICAL_AND_REPLAY
+      TIMEZONE: Asia/Kolkata
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in untracked .env}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      DB_POOL_MODE: ${DB_POOL_MODE:-QUEUE}
+      AUTO_SEED_REFERENCE_DATA: "false"
+      REPLAY_WORKER_ENABLED: ${REPLAY_WORKER_ENABLED:-true}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8501,http://127.0.0.1:8501}
+      PORT: 8000
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    environment:
+      API_BASE_URL: ${DOCKER_API_BASE_URL:-http://api:8000}
+      API_TIMEOUT_SECONDS: "25.0"
+      PORT: 8501
+      TZ: Asia/Kolkata
+    ports:
+      - "${UI_PORT:-8501}:8501"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

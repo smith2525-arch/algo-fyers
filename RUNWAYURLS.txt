@@ -1,0 +1,8 @@
+postgres connection string:
+
+postgresql://algo_control_center_owner:npg_lWDVF0Ogqd2B@ep-polished-field-binmpyb1-pooler.c-5.ap-southeast-1.aws.neon.tech/algo_control_center?sslmode=require&channel_binding=require
+
+
+URL https://atcc-api-r1mn.onrender.com
+
+https://atcc-ui.onrender.com
