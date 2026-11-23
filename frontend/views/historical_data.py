@@ -124,6 +124,19 @@ def _render_fyers_ingestion_panel(
             """,
             unsafe_allow_html=True,
         )
+    else:
+        auth_mode_lbl = html.escape(str(fyers_status.get("auth_mode", "CONFIGURED")))
+        st.markdown(
+            f"""
+            <div class="desk-panel" style="padding:0.35rem 0.75rem; margin-bottom:0.45rem;">
+                <div class="mono" style="font-size:0.71rem; color:#CBD5E1; display:flex; justify-content:space-between; flex-wrap:wrap;">
+                    <span>FYERS AUTH MODE: <strong style="color:#10B981;">{auth_mode_lbl}</strong></span>
+                    <span>HISTORICAL ENDPOINT: <strong>READ-ONLY (/data/history)</strong></span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     inst_codes = [str(i["internal_symbol"]) for i in instruments] or ["NIFTY", "BANKNIFTY"]
     by_code = {str(i["internal_symbol"]): i for i in instruments}

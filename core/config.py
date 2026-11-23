@@ -172,6 +172,26 @@ class AppSettings(BaseSettings):
             )
         return normalized
 
+    @field_validator(
+        "FYERS_CLIENT_ID",
+        "FYERS_SECRET_KEY",
+        "FYERS_REDIRECT_URI",
+        "FYERS_ACCESS_TOKEN",
+        "FYERS_USER_ID",
+        "FYERS_TOTP_SECRET",
+        "FYERS_PIN",
+        mode="before",
+    )
+    @classmethod
+    def _strip_accidental_env_quotes(cls, value: object) -> str:
+        """Strip accidental surrounding quotes/whitespace pasted into cloud dashboard env inputs."""
+        if value is None:
+            return ""
+        txt = str(value).strip()
+        if len(txt) >= 2 and ((txt[0] == '"' and txt[-1] == '"') or (txt[0] == "'" and txt[-1] == "'")):
+            txt = txt[1:-1].strip()
+        return txt
+
     @field_validator("EXECUTION_MODE")
     @classmethod
     def _enforce_paper_only_in_v1(cls, value: str) -> str:

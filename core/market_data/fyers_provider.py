@@ -32,6 +32,7 @@ from core.exceptions import (
 from core.market_data.fyers_totp_auth import (
     FyersTotpAuthenticator,
     clear_fyers_totp_token_cache,
+    normalize_fyers_full_client_id,
 )
 from core.market_data.models import (
     DataSourceType,
@@ -153,12 +154,12 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
     @staticmethod
     def _format_client_token_header(raw_cid: str, raw_token: str) -> str:
         tok = raw_token.strip()
-        cid = raw_cid.strip()
+        cid = normalize_fyers_full_client_id(raw_cid)
         if ":" in tok:
             left, _, right = tok.partition(":")
             if not left.strip() or not right.strip():
                 raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
-            return f"{left.strip()}:{right.strip()}"
+            return f"{normalize_fyers_full_client_id(left)}:{right.strip()}"
         if not cid or cid.startswith("<") or cid.endswith(">"):
             raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
         return f"{cid}:{tok}"

@@ -101,12 +101,20 @@ def generate_rfc6238_totp(
 
 def split_fyers_client_id(client_id: str) -> tuple[str, str]:
     """Split `APPID-100` into `('APPID', '100')` for step-4 `/api/v3/token` payload."""
-    clean = (client_id or "").strip()
+    clean = (client_id or "").strip().strip('"').strip("'").strip()
     if "-" in clean:
         prefix, _, suffix = clean.rpartition("-")
         if prefix and suffix.isdigit():
             return prefix, suffix
     return clean, "100"
+
+
+def normalize_fyers_full_client_id(client_id: str) -> str:
+    """Ensure full FYERS v3 App ID includes appType suffix (e.g. `APPID` -> `APPID-100`)."""
+    prefix, app_type = split_fyers_client_id(client_id)
+    if not prefix:
+        return ""
+    return f"{prefix}-{app_type}"
 
 
 def _extract_jwt_expiry_ist(jwt_token: str) -> datetime | None:
@@ -336,7 +344,7 @@ class FyersTotpAuthenticator:
         unix_ts = self._unix_time_fn() if callable(self._unix_time_fn) else None
         otp_code = generate_rfc6238_totp(totp_secret, unix_time=unix_ts)
         app_prefix, app_type = split_fyers_client_id(client_id)
-        app_id_hash = hashlib.sha256(f"{client_id}:{secret_key}".encode("utf-8")).hexdigest()
+        full_client_id = normalize_fyers_full_client_id(client_id)
 
         timeout = httpx.Timeout(float(self._cfg.FYERS_REQUEST_TIMEOUT_SECONDS))
         with httpx.Client(
@@ -427,42 +435,32 @@ class FyersTotpAuthenticator:
                 )
 
             # Step 5: /api/v3/validate-authcode -> final daily access_token
-            # If user omitted '-100' suffix in FYERS_CLIENT_ID, auto-try f'{client_id}-100' if bare hash fails
-            candidate_app_ids = [client_id]
-            if "-" not in client_id:
-                candidate_app_ids.append(f"{client_id}-100")
+            # Always try canonical `APPID-100` first so single-use `auth_code` is not burned!
+            cand_hash = hashlib.sha256(
+                f"{full_client_id}:{secret_key}".encode("utf-8")
+            ).hexdigest()
+            try:
+                step5 = self._post_json_step(
+                    client,
+                    f"{self._auth_v3_base}/validate-authcode",
+                    payload={
+                        "grant_type": "authorization_code",
+                        "appIdHash": cand_hash,
+                        "code": auth_code,
+                    },
+                    step_label="step 5 (validate_authcode)",
+                )
+            except FyersAuthenticationRequiredError:
+                _raise_totp_step_auth_error(
+                    "Headless TOTP failed at step 5 (validate_authcode): appIdHash rejected — "
+                    "verify FYERS_CLIENT_ID and FYERS_SECRET_KEY."
+                )
 
-            final_token = ""
-            for cand_cid in candidate_app_ids:
-                cand_hash = hashlib.sha256(f"{cand_cid}:{secret_key}".encode("utf-8")).hexdigest()
-                try:
-                    step5 = self._post_json_step(
-                        client,
-                        f"{self._auth_v3_base}/validate-authcode",
-                        payload={
-                            "grant_type": "authorization_code",
-                            "appIdHash": cand_hash,
-                            "code": auth_code,
-                        },
-                        step_label="step 5 (validate_authcode)",
-                    )
-                    tok = str(step5.get("access_token") or "").strip()
-                    if str(step5.get("s", "")).lower() == "ok" and tok:
-                        final_token = (
-                            f"{cand_cid}:{tok}" if (cand_cid != client_id and ":" not in tok) else tok
-                        )
-                        break
-                except FyersAuthenticationRequiredError:
-                    if cand_cid == candidate_app_ids[-1]:
-                        _raise_totp_step_auth_error(
-                            "Headless TOTP failed at step 5 (validate_authcode): appIdHash rejected — "
-                            "verify FYERS_CLIENT_ID (e.g. XXXXX-100) and FYERS_SECRET_KEY."
-                        )
-
-            if not final_token:
+            tok = str(step5.get("access_token") or "").strip()
+            if str(step5.get("s", "")).lower() != "ok" or not tok:
                 _raise_totp_step_auth_error(
                     "Headless TOTP failed at step 5 (validate_authcode): no access_token returned."
                 )
 
-            return final_token
+            return f"{full_client_id}:{tok}" if ":" not in tok else tok
 
