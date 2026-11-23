@@ -46,6 +46,7 @@ class ControlCenterApiClient:
         *,
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
+        timeout_override: float | None = None,
     ) -> ApiResult:
         cid = str(uuid.uuid4())
         headers = {
@@ -54,6 +55,7 @@ class ControlCenterApiClient:
         }
         url = f"{self.base_url}{path}"
         is_loopback = "localhost" in self.base_url or "127.0.0.1" in self.base_url
+        req_timeout = float(timeout_override) if timeout_override is not None else self.timeout
         # Bounded finite retry ONLY for remote scale-to-zero cold starts (Render Free / Cloud Run).
         # Never loops infinitely and never generates background keep-alive traffic.
         max_attempts = 1 if is_loopback else 3
@@ -62,7 +64,7 @@ class ControlCenterApiClient:
         last_exc: Exception | None = None
         for attempt in range(max_attempts):
             try:
-                with httpx.Client(timeout=self.timeout, trust_env=not is_loopback) as client:
+                with httpx.Client(timeout=req_timeout, trust_env=not is_loopback) as client:
                     resp = client.request(
                         method=method,
                         url=url,
@@ -688,7 +690,12 @@ class ControlCenterApiClient:
         return self._request("GET", "/api/v1/historical-data/instruments")
 
     def trigger_fyers_download(self, payload: dict[str, Any]) -> ApiResult:
-        return self._request("POST", "/api/v1/historical-data/downloads", json_body=payload)
+        return self._request(
+            "POST",
+            "/api/v1/historical-data/downloads",
+            json_body=payload,
+            timeout_override=max(self.timeout, 90.0),
+        )
 
     def get_historical_download_run(self, download_id: str) -> ApiResult:
         return self._request("GET", f"/api/v1/historical-data/downloads/{download_id}")
@@ -796,4 +803,5 @@ class ControlCenterApiClient:
                 error=f"Unable to download CSV ({type(exc).__name__}).",
                 correlation_id=cid,
             )
+
 

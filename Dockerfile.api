@@ -24,6 +24,20 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash appuser
 
+# Install ONLY backend runtime dependencies BEFORE copying source code so:
+# 1. Heavy UI-only packages (`streamlit`, `pyarrow` 55MB, `pandas`, `numpy`, `plotly`) are excluded from the API image
+# 2. Docker layer caching keeps `pip install` cached (0.0s) across `core/` and `backend/` code deploys
+RUN pip install --no-cache-dir \
+    "fastapi>=0.115.0" \
+    "uvicorn[standard]>=0.32.0" \
+    "pydantic>=2.9.0" \
+    "pydantic-settings>=2.6.0" \
+    "sqlalchemy>=2.0.36" \
+    "psycopg[binary]>=3.2.3" \
+    "alembic>=1.14.0" \
+    "httpx>=0.27.2" \
+    "tzdata>=2024.2"
+
 COPY pyproject.toml README.md alembic.ini ./
 COPY core ./core
 COPY backend ./backend
@@ -31,8 +45,7 @@ COPY migrations ./migrations
 COPY demo_data ./demo_data
 COPY deploy ./deploy
 
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir .
+ENV PYTHONPATH=/app
 
 USER appuser
 
@@ -42,3 +55,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${PORT:-8080}/health/live" || exit 1
 
 CMD ["sh", "-c", "exec uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080} --timeout-graceful-shutdown 10"]
+

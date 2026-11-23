@@ -394,6 +394,9 @@ def render(client: ControlCenterApiClient) -> None:
         (p for p in providers_list if p.get("provider") == "FYERS"),
         {"enabled": True, "status": "FYERS_AUTHENTICATION_REQUIRED"},
     )
+    if not inst_res.ok and inst_res.error:
+        st.error(f"Historical Data Catalog Error: {inst_res.error}")
+
     inst_payload: dict[str, Any] = (
         inst_res.data if (inst_res.ok and isinstance(inst_res.data, dict)) else {}
     )

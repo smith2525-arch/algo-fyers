@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, insert, select
 from sqlalchemy.orm import Session
 
 from core.audit.service import AuditService
@@ -608,6 +608,39 @@ class HistoricalDatasetService:
         return {"deleted": True, "dataset_id": deleted_code}
 
     @staticmethod
+    def _bulk_insert_candles(
+        session: Session,
+        *,
+        dataset_id: uuid.UUID,
+        instrument_symbol: str,
+        timeframe: str,
+        candles: list[NormalizedCandle],
+        batch_size: int = 2000,
+    ) -> None:
+        """Insert normalized OHLCV candles in bounded batches to minimize cloud PostgreSQL round-trips."""
+        if not candles:
+            return
+        for start_idx in range(0, len(candles), batch_size):
+            chunk = candles[start_idx : start_idx + batch_size]
+            rows = [
+                {
+                    "id": uuid.uuid4(),
+                    "dataset_id": dataset_id,
+                    "instrument_symbol": instrument_symbol,
+                    "timeframe": timeframe,
+                    "bar_timestamp": c.timestamp,
+                    "open": c.open,
+                    "high": c.high,
+                    "low": c.low,
+                    "close": c.close,
+                    "volume": int(c.volume),
+                }
+                for c in chunk
+            ]
+            session.execute(insert(HistoricalCandleModel), rows)
+        session.flush()
+
+    @staticmethod
     def upload_csv_dataset(
         session: Session,
         *,
@@ -681,23 +714,13 @@ class HistoricalDatasetService:
         session.flush()
 
         if fetch_res.quality.passed_validation and fetch_res.candles:
-            session.add_all(
-                [
-                    HistoricalCandleModel(
-                        dataset_id=ds_model.id,
-                        instrument_symbol=inst_spec.internal_symbol,
-                        timeframe=tf_spec.code,
-                        bar_timestamp=c.timestamp,
-                        open=c.open,
-                        high=c.high,
-                        low=c.low,
-                        close=c.close,
-                        volume=c.volume,
-                    )
-                    for c in fetch_res.candles
-                ]
+            HistoricalDatasetService._bulk_insert_candles(
+                session,
+                dataset_id=ds_model.id,
+                instrument_symbol=inst_spec.internal_symbol,
+                timeframe=tf_spec.code,
+                candles=fetch_res.candles,
             )
-            session.flush()
 
         labels = classify_data_source(ds_model.source_type, ds_model.provider)
         sev = (
@@ -1259,23 +1282,13 @@ class HistoricalDatasetService:
             session.add(ds_model)
             session.flush()
 
-            session.add_all(
-                [
-                    HistoricalCandleModel(
-                        dataset_id=ds_model.id,
-                        instrument_symbol=inst_spec.internal_symbol,
-                        timeframe=tf_spec.code,
-                        bar_timestamp=c.timestamp,
-                        open=c.open,
-                        high=c.high,
-                        low=c.low,
-                        close=c.close,
-                        volume=c.volume,
-                    )
-                    for c in fetch_res.candles
-                ]
+            HistoricalDatasetService._bulk_insert_candles(
+                session,
+                dataset_id=ds_model.id,
+                instrument_symbol=inst_spec.internal_symbol,
+                timeframe=tf_spec.code,
+                candles=fetch_res.candles,
             )
-            session.flush()
 
         is_partial = qual.quality_status == DataQualityStatus.PARTIAL
         run_row.status = "PARTIAL" if is_partial else "COMPLETED"
