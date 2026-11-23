@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Query, Response, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from backend.schemas.api import HistoricalDownloadRequest, HistoricalUploadRequest
@@ -64,25 +65,29 @@ def trigger_fyers_historical_download(payload: HistoricalDownloadRequest) -> Res
     if not outcome["ok"]:
         return JSONResponse(
             status_code=http_code,
-            content={
-                "error": outcome["error_code"],
-                "message": outcome["message"],
-                "auth_diagnostic": outcome.get("auth_diagnostic"),
-                "download_run": outcome["download_run"],
-                "data_quality_report": outcome.get("data_quality_report"),
-                "correlation_id": get_correlation_id(),
-            },
+            content=jsonable_encoder(
+                {
+                    "error": outcome["error_code"],
+                    "message": outcome["message"],
+                    "auth_diagnostic": outcome.get("auth_diagnostic"),
+                    "download_run": outcome["download_run"],
+                    "data_quality_report": outcome.get("data_quality_report"),
+                    "correlation_id": get_correlation_id(),
+                }
+            ),
         )
 
     return JSONResponse(
         status_code=http_code,
-        content={
-            "status": outcome["download_run"]["status"],
-            "message": outcome["message"],
-            "download_run": outcome["download_run"],
-            "dataset": outcome["dataset"],
-            "data_quality_report": outcome["data_quality_report"],
-        },
+        content=jsonable_encoder(
+            {
+                "status": outcome["download_run"]["status"],
+                "message": outcome["message"],
+                "download_run": outcome["download_run"],
+                "dataset": outcome["dataset"],
+                "data_quality_report": outcome["data_quality_report"],
+            }
+        ),
     )
 
 

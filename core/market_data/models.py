@@ -482,8 +482,8 @@ class HistoricalDatasetMetadata:
             "candle_count": self.candle_count,
             "requested_from": format_ist_iso(self.requested_from) if self.requested_from else None,
             "requested_to": format_ist_iso(self.requested_to) if self.requested_to else None,
-            "start_timestamp": self.actual_from,
-            "end_timestamp": self.actual_to,
+            "start_timestamp": format_ist_iso(self.actual_from) if self.actual_from else None,
+            "end_timestamp": format_ist_iso(self.actual_to) if self.actual_to else None,
             "actual_from": format_ist_iso(self.actual_from) if self.actual_from else None,
             "actual_to": format_ist_iso(self.actual_to) if self.actual_to else None,
             "retrieved_at": format_ist_iso(self.retrieved_at) if self.retrieved_at else None,
@@ -499,3 +499,4 @@ class HistoricalDatasetMetadata:
             "labels": labels.to_dict(),
             "metadata": dict(self.metadata),
         }
+
