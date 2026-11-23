@@ -54,7 +54,27 @@ class AppSettings(BaseSettings):
     )
     FYERS_ACCESS_TOKEN: str = Field(
         default="",
-        description="Current FYERS v3 access token (short-lived; historical OHLCV read access only).",
+        description="Optional pre-generated FYERS v3 access token (short-lived; historical OHLCV read access only).",
+    )
+    FYERS_USER_ID: str = Field(
+        default="",
+        description="Optional FYERS User ID (fy_id) for backend headless TOTP token generation.",
+    )
+    FYERS_TOTP_SECRET: str = Field(
+        default="",
+        description="Optional Base32 TOTP 2FA secret key for backend headless token generation (never logged/exposed).",
+    )
+    FYERS_PIN: str = Field(
+        default="",
+        description="Optional FYERS account PIN for backend headless TOTP token generation (never logged/exposed).",
+    )
+    FYERS_VAGATOR_BASE_URL: str = Field(
+        default="https://api-t2.fyers.in/vagator/v2",
+        description="FYERS Vagator v2 authentication base URL used only for headless TOTP token handshake.",
+    )
+    FYERS_AUTH_V3_BASE_URL: str = Field(
+        default="https://api-t1.fyers.in/api/v3",
+        description="FYERS API v3 OAuth token/validate-authcode base URL used only for token handshake.",
     )
     FYERS_HISTORICAL_DATA_URL: str = Field(
         default="https://api-t1.fyers.in/data/history",
@@ -220,19 +240,51 @@ class AppSettings(BaseSettings):
             return f"{scheme}://{user}:***@{host_part}"
         return f"{scheme}://{auth}@{host_part}"
 
+    @staticmethod
+    def _is_populated_non_placeholder(raw: str | None) -> bool:
+        val = (raw or "").strip()
+        return bool(val and not val.startswith("<") and not val.endswith(">"))
+
     @property
-    def fyers_token_configured(self) -> bool:
-        """Return True when non-placeholder FYERS historical credentials are supplied (never exposes values)."""
+    def fyers_totp_configured(self) -> bool:
+        """Return True when all 6 headless TOTP fields are populated (never exposes values)."""
+        return all(
+            self._is_populated_non_placeholder(v)
+            for v in (
+                self.FYERS_USER_ID,
+                self.FYERS_TOTP_SECRET,
+                self.FYERS_PIN,
+                self.FYERS_CLIENT_ID,
+                self.FYERS_SECRET_KEY,
+                self.FYERS_REDIRECT_URI,
+            )
+        )
+
+    @property
+    def fyers_static_token_configured(self) -> bool:
+        """Return True when a static FYERS_ACCESS_TOKEN (+ FYERS_CLIENT_ID) is populated."""
         tok = (self.FYERS_ACCESS_TOKEN or "").strip()
         cid = (self.FYERS_CLIENT_ID or "").strip()
-        if not tok or tok.startswith("<") or tok.endswith(">"):
+        if not self._is_populated_non_placeholder(tok):
             return False
         if ":" in tok:
             left, _, right = tok.partition(":")
             return bool(left.strip() and right.strip())
-        if not cid or cid.startswith("<") or cid.endswith(">"):
-            return False
-        return True
+        return self._is_populated_non_placeholder(cid)
+
+    @property
+    def fyers_auth_mode(self) -> str:
+        """Return sanitized authentication mode indicator (`HEADLESS_TOTP` | `STATIC_ACCESS_TOKEN` | `UNCONFIGURED`)."""
+        if self.fyers_totp_configured:
+            return "HEADLESS_TOTP"
+        if self.fyers_static_token_configured:
+            return "STATIC_ACCESS_TOKEN"
+        return "UNCONFIGURED"
+
+    @property
+    def fyers_token_configured(self) -> bool:
+        """Return True when either headless TOTP or a static access token is configured."""
+        return self.fyers_totp_configured or self.fyers_static_token_configured
 
     @property
     def public_database_display(self) -> str:
@@ -255,3 +307,4 @@ def get_settings() -> AppSettings:
 def clear_settings_cache() -> None:
     """Clear settings cache (used in tests when overriding env vars)."""
     get_settings.cache_clear()
+

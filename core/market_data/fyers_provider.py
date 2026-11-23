@@ -29,6 +29,10 @@ from core.exceptions import (
     HistoricalDataError,
     HistoricalProviderUnavailableError,
 )
+from core.market_data.fyers_totp_auth import (
+    FyersTotpAuthenticator,
+    clear_fyers_totp_token_cache,
+)
 from core.market_data.models import (
     DataSourceType,
     HistoricalProviderName,
@@ -141,9 +145,25 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
             self._cfg.FYERS_SECRET_KEY,
             self._cfg.FYERS_CLIENT_ID,
             self._cfg.FYERS_REDIRECT_URI,
+            self._cfg.FYERS_USER_ID,
+            self._cfg.FYERS_TOTP_SECRET,
+            self._cfg.FYERS_PIN,
         )
 
-    def _build_authorization_header(self) -> str:
+    @staticmethod
+    def _format_client_token_header(raw_cid: str, raw_token: str) -> str:
+        tok = raw_token.strip()
+        cid = raw_cid.strip()
+        if ":" in tok:
+            left, _, right = tok.partition(":")
+            if not left.strip() or not right.strip():
+                raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
+            return f"{left.strip()}:{right.strip()}"
+        if not cid or cid.startswith("<") or cid.endswith(">"):
+            raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
+        return f"{cid}:{tok}"
+
+    def _build_authorization_header(self, *, force_totp_refresh: bool = False) -> str:
         if not self._cfg.FYERS_HISTORICAL_DATA_ENABLED:
             raise HistoricalProviderUnavailableError(
                 "FYERS historical data integration is disabled by configuration "
@@ -151,27 +171,28 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
                 code="FYERS_HISTORICAL_DISABLED",
             )
 
-        raw_token = (self._cfg.FYERS_ACCESS_TOKEN or "").strip()
         raw_cid = (self._cfg.FYERS_CLIENT_ID or "").strip()
 
-        if not raw_token or raw_token.startswith("<") or raw_token.endswith(">"):
-            raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
+        # 1. If a static access token is explicitly provided and we are not forcing TOTP renewal, try it first
+        if not force_totp_refresh and self._cfg.fyers_static_token_configured:
+            return self._format_client_token_header(raw_cid, self._cfg.FYERS_ACCESS_TOKEN)
 
-        if ":" in raw_token:
-            left, _, right = raw_token.partition(":")
-            if not left.strip() or not right.strip():
-                raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
-            return f"{left.strip()}:{right.strip()}"
+        # 2. Otherwise (or on 401 expiry recovery), use in-backend headless TOTP (`vagator/v2`)
+        if self._cfg.fyers_totp_configured:
+            totp_auth = FyersTotpAuthenticator(
+                self._cfg,
+                http_transport=self._transport,
+            )
+            minted_token = totp_auth.get_or_mint_access_token(force_refresh=force_totp_refresh)
+            return self._format_client_token_header(raw_cid, minted_token)
 
-        if not raw_cid or raw_cid.startswith("<") or raw_cid.endswith(">"):
-            raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
-
-        return f"{raw_cid}:{raw_token}"
+        raise FyersAuthenticationRequiredError(FYERS_AUTH_RENEWAL_UI_MESSAGE)
 
     def provider_status(self) -> dict[str, Any]:
         """Return strictly sanitized provider readiness (never exposes tokens or client secrets)."""
         enabled = bool(self._cfg.FYERS_HISTORICAL_DATA_ENABLED)
         configured = bool(self._cfg.fyers_token_configured)
+        auth_mode = self._cfg.fyers_auth_mode
         if not enabled:
             status_code = "DISABLED"
             message = (
@@ -183,8 +204,13 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
             message = FYERS_AUTH_RENEWAL_UI_MESSAGE
         else:
             status_code = "CONFIGURED"
+            mode_note = (
+                "headless TOTP auto-renewal"
+                if auth_mode == "HEADLESS_TOTP"
+                else "static access token"
+            )
             message = (
-                "FYERS historical market-data credentials configured (token validity verified on request). "
+                f"FYERS historical market-data credentials configured ({mode_note}; verified on request). "
                 "Execution remains strictly SIMULATED PAPER TRADING."
             )
 
@@ -193,6 +219,7 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
             "source_type": self.source_type,
             "enabled": enabled,
             "credentials_configured": configured,
+            "auth_mode": auth_mode,
             "status": status_code,
             "message": message,
             "max_date_range_days": self._cfg.FYERS_MAX_DATE_RANGE_DAYS,
@@ -455,6 +482,7 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
         chunks_succeeded = 0
         chunks_failed = 0
 
+        did_force_totp_refresh = False
         timeout = httpx.Timeout(float(self._cfg.FYERS_REQUEST_TIMEOUT_SECONDS))
         with httpx.Client(
             timeout=timeout,
@@ -464,13 +492,30 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
         ) as client:
             for ch in chunks:
                 try:
-                    raw_rows = self._fetch_single_chunk(
-                        client,
-                        auth_header=auth_header,
-                        provider_symbol=eff_provider_symbol,
-                        fyers_resolution=tf_spec.fyers_resolution,
-                        chunk=ch,
-                    )
+                    try:
+                        raw_rows = self._fetch_single_chunk(
+                            client,
+                            auth_header=auth_header,
+                            provider_symbol=eff_provider_symbol,
+                            fyers_resolution=tf_spec.fyers_resolution,
+                            chunk=ch,
+                        )
+                    except FyersAuthenticationRequiredError:
+                        # Self-heal once via headless TOTP if TOTP credentials are configured
+                        if self._cfg.fyers_totp_configured and not did_force_totp_refresh:
+                            did_force_totp_refresh = True
+                            clear_fyers_totp_token_cache()
+                            auth_header = self._build_authorization_header(force_totp_refresh=True)
+                            raw_rows = self._fetch_single_chunk(
+                                client,
+                                auth_header=auth_header,
+                                provider_symbol=eff_provider_symbol,
+                                fyers_resolution=tf_spec.fyers_resolution,
+                                chunk=ch,
+                            )
+                        else:
+                            raise
+
                     chunks_succeeded += 1
                     merged_raw_tuples.extend(raw_rows)
                     summary = {
@@ -560,3 +605,4 @@ class FyersHistoricalDataProvider(HistoricalDataProvider):
             chunks_failed=chunks_failed,
             chunk_summaries=chunk_summaries,
         )
+

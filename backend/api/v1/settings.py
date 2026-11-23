@@ -32,5 +32,7 @@ def get_runtime_settings() -> RuntimeSettingsOut:
         database_reachable=bool(probe.get("reachable")),
         fyers_historical_data_enabled=bool(cfg.FYERS_HISTORICAL_DATA_ENABLED),
         fyers_token_configured=bool(cfg.fyers_token_configured),
+        fyers_auth_mode=cfg.fyers_auth_mode,
         timestamp_ist=now_ist(),
     )
+

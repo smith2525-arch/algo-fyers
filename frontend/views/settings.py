@@ -26,6 +26,7 @@ def render(client: ControlCenterApiClient) -> None:
     cfg = cfg_res.data
     fyers_en = bool(cfg.get("fyers_historical_data_enabled", True))
     fyers_tok = bool(cfg.get("fyers_token_configured", False))
+    fyers_mode = html.escape(str(cfg.get("fyers_auth_mode", "UNCONFIGURED")))
     fyers_tok_status = "CONFIGURED" if fyers_tok else "FYERS_AUTHENTICATION_REQUIRED"
     st.markdown(
         f"""
@@ -40,7 +41,7 @@ def render(client: ControlCenterApiClient) -> None:
                     <tr><td>Locked Execution Mode</td><td class="num">{badge_html("INFO")} &nbsp;{html.escape(str(cfg.get("execution_mode")))}</td></tr>
                     <tr><td>Market Data Mode</td><td class="num">{html.escape(str(cfg.get("market_mode")))}</td></tr>
                     <tr><td>FYERS Historical Data Ingestion</td><td class="num">{badge_html("ACTIVE" if fyers_en else "DISABLED")} &nbsp;{"HISTORICAL READ-ONLY" if fyers_en else "DISABLED"}</td></tr>
-                    <tr><td>FYERS Historical Credential State</td><td class="num">{badge_html(fyers_tok_status)}</td></tr>
+                    <tr><td>FYERS Historical Credential State</td><td class="num">{badge_html(fyers_tok_status)} &nbsp;[{fyers_mode}]</td></tr>
                     <tr><td>System Timezone</td><td class="num">{html.escape(str(cfg.get("timezone")))} (IST +05:30)</td></tr>
                     <tr><td>FastAPI Endpoint</td><td class="num">{html.escape(str(cfg.get("api_base_url")))}</td></tr>
                     <tr><td>PostgreSQL Connection (Masked)</td><td class="num">{html.escape(str(cfg.get("masked_database_url")))}</td></tr>
@@ -144,3 +145,4 @@ def render(client: ControlCenterApiClient) -> None:
                         st.rerun()
                     else:
                         st.error(upd.error or "Failed to update instrument")
+

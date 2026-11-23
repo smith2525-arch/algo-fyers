@@ -316,6 +316,7 @@ class RuntimeSettingsOut(BaseModel):
     database_reachable: bool
     fyers_historical_data_enabled: bool = True
     fyers_token_configured: bool = False
+    fyers_auth_mode: str = "UNCONFIGURED"
     timestamp_ist: ISTTimestamp
 
 
@@ -626,3 +627,4 @@ class UpdateStrategyRiskConfigRequest(BaseModel):
     allowed_order_types: list[str] | None = None
     is_enabled: bool | None = None
     actor: str = Field(default="risk.officer", min_length=2, max_length=128)
+

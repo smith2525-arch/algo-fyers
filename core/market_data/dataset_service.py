@@ -1012,7 +1012,14 @@ class HistoricalDatasetService:
         except HistoricalProviderUnavailableError as exc:
             safe_msg = sanitize_provider_error_text(
                 str(exc),
-                extra_secrets=(cfg.FYERS_ACCESS_TOKEN, cfg.FYERS_SECRET_KEY, cfg.FYERS_CLIENT_ID),
+                extra_secrets=(
+                    cfg.FYERS_ACCESS_TOKEN,
+                    cfg.FYERS_SECRET_KEY,
+                    cfg.FYERS_CLIENT_ID,
+                    cfg.FYERS_USER_ID,
+                    cfg.FYERS_TOTP_SECRET,
+                    cfg.FYERS_PIN,
+                ),
             )
             run_row.status = "FAILED"
             run_row.quality_status = DataQualityStatus.DOWNLOAD_FAILED.value
@@ -1047,7 +1054,14 @@ class HistoricalDatasetService:
         except HistoricalDataError as exc:
             safe_msg = sanitize_provider_error_text(
                 str(exc),
-                extra_secrets=(cfg.FYERS_ACCESS_TOKEN, cfg.FYERS_SECRET_KEY, cfg.FYERS_CLIENT_ID),
+                extra_secrets=(
+                    cfg.FYERS_ACCESS_TOKEN,
+                    cfg.FYERS_SECRET_KEY,
+                    cfg.FYERS_CLIENT_ID,
+                    cfg.FYERS_USER_ID,
+                    cfg.FYERS_TOTP_SECRET,
+                    cfg.FYERS_PIN,
+                ),
             )
             run_row.status = "FAILED"
             run_row.quality_status = DataQualityStatus.DOWNLOAD_FAILED.value
@@ -1300,3 +1314,4 @@ class HistoricalDatasetService:
             "dataset": ds_out,
             "data_quality_report": dq_dict,
         }
+
