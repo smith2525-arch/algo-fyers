@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session
 
 from core.audit.service import AuditService
@@ -49,6 +49,8 @@ def _compute_reproducibility_fingerprint(payload: dict[str, Any]) -> str:
 def _build_chart_bars(
     bars: list[OHLCVBar],
     strategy_cfg: EmaRsiStrategyConfig,
+    *,
+    max_chart_bars: int = 1500,
 ) -> list[dict[str, Any]]:
     if not bars:
         return []
@@ -57,8 +59,12 @@ def _build_chart_bars(
     slow_ema = compute_ema_series(closes, strategy_cfg.slow_ema_period)
     rsi = compute_rsi_series(closes, strategy_cfg.rsi_period)
 
+    # Cap interactive candlestick overlay slice on 1-year intraday datasets while keeping
+    # full-history EMA/RSI indicator warmup exact.
+    start_idx = max(0, len(bars) - max_chart_bars)
     out: list[dict[str, Any]] = []
-    for idx, bar in enumerate(bars):
+    for idx in range(start_idx, len(bars)):
+        bar = bars[idx]
         f_val = fast_ema[idx]
         s_val = slow_ema[idx]
         r_val = rsi[idx]
@@ -452,8 +458,11 @@ class BacktestService:
         session.flush()
 
         trade_models: list[BacktestTradeModel] = []
+        trade_insert_dicts: list[dict[str, Any]] = []
         for t in output.trades:
+            row_id = uuid.uuid4()
             tm = BacktestTradeModel(
+                id=row_id,
                 backtest_run_id=run_model.id,
                 deterministic_trade_id=t.trade_id,
                 trade_number=t.trade_number,
@@ -477,9 +486,39 @@ class BacktestService:
                 bars_held=t.bars_held,
             )
             trade_models.append(tm)
+            trade_insert_dicts.append(
+                {
+                    "id": row_id,
+                    "backtest_run_id": run_model.id,
+                    "deterministic_trade_id": t.trade_id,
+                    "trade_number": t.trade_number,
+                    "strategy_version_id": t.strategy_version_id,
+                    "strategy_version_label": t.strategy_version_label,
+                    "instrument_symbol": t.instrument,
+                    "direction": t.direction.value,
+                    "entry_signal_time": t.entry_signal_time,
+                    "entry_time": t.entry_time,
+                    "raw_entry_price": t.raw_entry_price,
+                    "entry_price": t.entry_price,
+                    "quantity": t.quantity,
+                    "exit_time": t.exit_time,
+                    "raw_exit_price": t.raw_exit_price,
+                    "exit_price": t.exit_price,
+                    "exit_reason": t.exit_reason.value,
+                    "gross_pnl": t.gross_pnl,
+                    "charges": t.charges,
+                    "slippage_cost": t.slippage_cost,
+                    "net_pnl": t.net_pnl,
+                    "bars_held": t.bars_held,
+                }
+            )
 
-        if trade_models:
-            session.add_all(trade_models)
+        if trade_insert_dicts:
+            for batch_start in range(0, len(trade_insert_dicts), 1000):
+                session.execute(
+                    insert(BacktestTradeModel),
+                    trade_insert_dicts[batch_start : batch_start + 1000],
+                )
             session.flush()
 
         audit_sev = (
@@ -667,3 +706,4 @@ class BacktestService:
             "trades": [BacktestService._serialize_trade(t) for t in trades],
             "chart_bars": chart_bars,
         }
+

@@ -38,26 +38,30 @@ def compute_backtest_analytics(
         _q2((net_pnl / initial_capital) * Decimal("100")) if initial_capital > 0 else None
     )
 
-    # Equity & Peak-to-Trough Drawdown Curves
-    equity_curve: list[dict[str, Any]] = []
-    drawdown_curve: list[dict[str, Any]] = []
+    # Equity & Peak-to-Trough Drawdown Curves (computed over 100% of bars for exact metrics)
+    full_equity_curve: list[dict[str, Any]] = []
+    full_drawdown_curve: list[dict[str, Any]] = []
     peak_equity = initial_capital
     max_dd_inr = Decimal("0")
     max_dd_pct = Decimal("0")
+    peak_idx = 0
+    max_dd_idx = 0
 
-    for pt in raw_equity_points:
+    for idx, pt in enumerate(raw_equity_points):
         eq = Decimal(str(pt["equity"]))
         if eq > peak_equity:
             peak_equity = eq
+            peak_idx = idx
         dd_inr = peak_equity - eq  # >= 0 magnitude of drawdown
         dd_pct = (dd_inr / peak_equity * Decimal("100")) if peak_equity > 0 else Decimal("0")
         if dd_inr > max_dd_inr:
             max_dd_inr = dd_inr
+            max_dd_idx = idx
         if dd_pct > max_dd_pct:
             max_dd_pct = dd_pct
 
         ts_str = str(pt["timestamp"])
-        equity_curve.append(
+        full_equity_curve.append(
             {
                 "timestamp": ts_str,
                 "equity": _q2(eq),
@@ -65,13 +69,28 @@ def compute_backtest_analytics(
                 "unrealized_pnl": _q2(Decimal(str(pt["unrealized_pnl"]))),
             }
         )
-        drawdown_curve.append(
+        full_drawdown_curve.append(
             {
                 "timestamp": ts_str,
                 "drawdown_inr": _q2(-dd_inr if dd_inr > 0 else Decimal("0")),
                 "drawdown_pct": _q2(-dd_pct if dd_pct > 0 else Decimal("0")),
             }
         )
+
+    # Bound stored/transmitted curve length for multi-month/1-year intraday datasets (>1,500 bars)
+    # while preserving exact endpoints, peak, and maximum-drawdown trough indices.
+    max_curve_points = 1500
+    n_pts = len(full_equity_curve)
+    if n_pts <= max_curve_points:
+        equity_curve = full_equity_curve
+        drawdown_curve = full_drawdown_curve
+    else:
+        stride = max(1, n_pts // max_curve_points)
+        keep_indices = set(range(0, n_pts, stride))
+        keep_indices.update({0, n_pts - 1, peak_idx, max_dd_idx})
+        ordered_idx = sorted(keep_indices)
+        equity_curve = [full_equity_curve[i] for i in ordered_idx]
+        drawdown_curve = [full_drawdown_curve[i] for i in ordered_idx]
 
     winners = [t.net_pnl for t in trades if t.net_pnl > 0]
     losers = [t.net_pnl for t in trades if t.net_pnl < 0]
@@ -173,3 +192,4 @@ def compute_backtest_analytics(
         "exposure_time_pct": exposure_time_pct,
     }
     return metrics, equity_curve, drawdown_curve, monthly_returns
+

@@ -135,33 +135,25 @@ class EmaRsiCrossoverStrategy(BaseStrategy):
         """Minimum closed bars required so previous & current EMA + current RSI exist."""
         return max(self._config.slow_ema_period + 1, self._config.rsi_period + 1)
 
-    def evaluate_closed_bars(
+    def evaluate_bar_with_precomputed_indicators(
         self,
-        bars: Sequence[OHLCVBar],
+        curr_bar: OHLCVBar,
         *,
+        bars_seen_count: int,
+        curr_fast: Decimal | None,
+        curr_slow: Decimal | None,
+        prev_fast: Decimal | None,
+        prev_slow: Decimal | None,
+        curr_rsi: Decimal | None,
         open_position: OpenPositionSnapshot | None = None,
         trades_taken_today: int = 0,
     ) -> SignalCandidate | None:
-        if not bars:
-            return None
-
-        curr_bar = bars[-1]
+        """Evaluate closed-bar rules in O(1) using strictly causal indicator values at bar `i`."""
         if curr_bar.symbol.upper() != self._config.instrument.upper():
             return None
 
         bar_ist = ensure_ist(curr_bar.bar_timestamp)
         bar_time = bar_ist.timetz().replace(tzinfo=None)
-
-        closes = [b.close for b in bars]
-        fast_series = compute_ema_series(closes, self._config.fast_ema_period)
-        slow_series = compute_ema_series(closes, self._config.slow_ema_period)
-        rsi_series = compute_rsi_series(closes, self._config.rsi_period)
-
-        curr_fast = fast_series[-1] if fast_series else None
-        curr_slow = slow_series[-1] if slow_series else None
-        prev_fast = fast_series[-2] if len(fast_series) >= 2 else None
-        prev_slow = slow_series[-2] if len(slow_series) >= 2 else None
-        curr_rsi = rsi_series[-1] if rsi_series else None
 
         bullish_cross = (
             prev_fast is not None
@@ -204,7 +196,7 @@ class EmaRsiCrossoverStrategy(BaseStrategy):
             return None
 
         # 2. Entry eligibility gates: warmup, weekday, IST entry window, max trades/day
-        if len(bars) < self.warmup_bars_required:
+        if bars_seen_count < self.warmup_bars_required:
             return None
         if bar_ist.weekday() >= 5:
             return None
@@ -212,7 +204,7 @@ class EmaRsiCrossoverStrategy(BaseStrategy):
             return None
         if trades_taken_today >= self._config.max_trades_per_day:
             return None
-        if curr_rsi is None:
+        if curr_rsi is None or curr_fast is None or curr_slow is None:
             return None
 
         # 3. Evaluate LONG & SHORT entry crossover + RSI confirmation
@@ -251,6 +243,33 @@ class EmaRsiCrossoverStrategy(BaseStrategy):
             )
 
         return None
+
+    def evaluate_closed_bars(
+        self,
+        bars: Sequence[OHLCVBar],
+        *,
+        open_position: OpenPositionSnapshot | None = None,
+        trades_taken_today: int = 0,
+    ) -> SignalCandidate | None:
+        if not bars:
+            return None
+
+        closes = [b.close for b in bars]
+        fast_series = compute_ema_series(closes, self._config.fast_ema_period)
+        slow_series = compute_ema_series(closes, self._config.slow_ema_period)
+        rsi_series = compute_rsi_series(closes, self._config.rsi_period)
+
+        return self.evaluate_bar_with_precomputed_indicators(
+            bars[-1],
+            bars_seen_count=len(bars),
+            curr_fast=fast_series[-1] if fast_series else None,
+            curr_slow=slow_series[-1] if slow_series else None,
+            prev_fast=fast_series[-2] if len(fast_series) >= 2 else None,
+            prev_slow=slow_series[-2] if len(slow_series) >= 2 else None,
+            curr_rsi=rsi_series[-1] if rsi_series else None,
+            open_position=open_position,
+            trades_taken_today=trades_taken_today,
+        )
 
     def _distance_to_price_delta(self, reference_price: Decimal, distance: Decimal) -> Decimal:
         if self._config.stop_target_unit == ExitTargetUnit.PERCENT:
@@ -560,3 +579,4 @@ class EmaRsiCrossoverStrategy(BaseStrategy):
             rule_checks=rule_checks,
             signal=signal,
         )
+

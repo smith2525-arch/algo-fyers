@@ -44,6 +44,7 @@ from core.domain.enums import (
 from core.strategies.base import OHLCVBar, OpenPositionSnapshot
 from core.strategies.config_schema import EmaRsiStrategyConfig
 from core.strategies.ema_rsi import EmaRsiCrossoverStrategy
+from core.strategies.indicators import compute_ema_series, compute_rsi_series
 
 BACKTEST_ENGINE_VERSION = "backtest-engine-1.0.0"
 _BPS_DIVISOR = Decimal("10000")
@@ -173,6 +174,12 @@ class BacktestEngine:
             )
 
         # 2. Bar-by-Bar Zero-Lookahead Simulation Loop
+        # Pre-compute strictly causal forward recurrences once in O(N) (`series[i]` depends ONLY on `closes[0..i]`)
+        closes = [b.close for b in bars]
+        fast_ema_series = compute_ema_series(closes, self._strategy_cfg.fast_ema_period)
+        slow_ema_series = compute_ema_series(closes, self._strategy_cfg.slow_ema_period)
+        rsi_series = compute_rsi_series(closes, self._strategy_cfg.rsi_period)
+
         cash = self._inputs.initial_capital.quantize(_INR_QUANT)
         trades: list[BacktestTradeRecord] = []
         raw_equity_points: list[dict[str, object]] = []
@@ -367,7 +374,7 @@ class BacktestEngine:
                 }
             )
 
-            # Step D: Closed-Bar Strategy Evaluation (STRICT SLICE `bars[: i + 1]` -> NO FUTURE BARS!)
+            # Step D: Closed-Bar Strategy Evaluation (STRICTLY CAUSAL AT INDEX `i` -> NO FUTURE BARS!)
             if pending_order is None:
                 pos_snapshot: OpenPositionSnapshot | None = None
                 if active_pos is not None:
@@ -381,9 +388,14 @@ class BacktestEngine:
                         lowest_price_since_entry=active_pos.lowest_since_entry,
                     )
 
-                visible_history = bars[: i + 1]
-                candidate = self._strategy.evaluate_closed_bars(
-                    visible_history,
+                candidate = self._strategy.evaluate_bar_with_precomputed_indicators(
+                    bar,
+                    bars_seen_count=i + 1,
+                    curr_fast=fast_ema_series[i],
+                    curr_slow=slow_ema_series[i],
+                    prev_fast=fast_ema_series[i - 1] if i >= 1 else None,
+                    prev_slow=slow_ema_series[i - 1] if i >= 1 else None,
+                    curr_rsi=rsi_series[i],
                     open_position=pos_snapshot,
                     trades_taken_today=entries_today,
                 )
@@ -552,3 +564,4 @@ class BacktestEngine:
                 return target_px, ExitReason.PROFIT_TARGET
 
         return None
+

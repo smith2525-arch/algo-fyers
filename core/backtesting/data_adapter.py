@@ -272,24 +272,31 @@ class DatabaseCsvDataAdapter(HistoricalDataAdapter):
         else:
             from core.clock import format_ist_iso
 
-            candle_rows = list(
-                self._session.scalars(
-                    select(HistoricalCandleModel)
-                    .where(HistoricalCandleModel.dataset_id == model.id)
-                    .order_by(HistoricalCandleModel.bar_timestamp.asc())
-                ).all()
-            )
+            candle_tuples = self._session.execute(
+                select(
+                    HistoricalCandleModel.bar_timestamp,
+                    HistoricalCandleModel.open,
+                    HistoricalCandleModel.high,
+                    HistoricalCandleModel.low,
+                    HistoricalCandleModel.close,
+                    HistoricalCandleModel.volume,
+                )
+                .where(HistoricalCandleModel.dataset_id == model.id)
+                .order_by(HistoricalCandleModel.bar_timestamp.asc())
+            ).all()
             rows = [
                 RawCandleRow(
                     row_index=idx,
-                    timestamp_raw=format_ist_iso(ensure_ist(c.bar_timestamp)),
-                    open_raw=str(c.open),
-                    high_raw=str(c.high),
-                    low_raw=str(c.low),
-                    close_raw=str(c.close),
-                    volume_raw=str(c.volume),
+                    timestamp_raw=format_ist_iso(ensure_ist(bar_ts)),
+                    open_raw=str(o_px),
+                    high_raw=str(h_px),
+                    low_raw=str(l_px),
+                    close_raw=str(c_px),
+                    volume_raw=str(vol),
                 )
-                for idx, c in enumerate(candle_rows, start=1)
+                for idx, (bar_ts, o_px, h_px, l_px, c_px, vol) in enumerate(
+                    candle_tuples, start=1
+                )
             ]
         return RawCandleDataset(descriptor=self._to_descriptor(model), rows=rows)
 
@@ -409,3 +416,4 @@ class CompositeHistoricalDataAdapter(HistoricalDataAdapter):
             return self._db.load_dataset(dataset_id)
         except EntityNotFoundError:
             return self._bundled.load_dataset(dataset_id)
+

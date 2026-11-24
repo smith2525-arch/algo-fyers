@@ -23,11 +23,17 @@ from core.backtesting.models import (
     DataQualityReport,
     RawCandleRow,
 )
-from core.market_data.models import TIMEFRAME_REGISTRY
 from core.strategies.base import OHLCVBar
 
 TIMEFRAME_MINUTES: dict[str, int] = {
-    code: spec.bar_duration_minutes for code, spec in TIMEFRAME_REGISTRY.items()
+    "1m": 1,
+    "3m": 3,
+    "5m": 5,
+    "10m": 10,
+    "15m": 15,
+    "30m": 30,
+    "60m": 60,
+    "1d": 1440,
 }
 
 IST_OFFSET = timedelta(hours=5, minutes=30)
@@ -273,6 +279,8 @@ def validate_ohlcv_rows(
     hard_errors = null_count + out_of_order_count + duplicate_count + invalid_ohlc_count
 
     # 4. Missing candles & unexpected session gaps (evaluated when hard errors == 0 and bars > 0)
+    from core.market_data.models import TIMEFRAME_REGISTRY
+
     tf_spec = TIMEFRAME_REGISTRY.get(timeframe)
     is_intraday = tf_spec.is_intraday if tf_spec is not None else True
     step_mins = TIMEFRAME_MINUTES.get(timeframe, 5)
@@ -355,6 +363,7 @@ def validate_ohlcv_rows(
         unexpected_session_gap_count=unexpected_gap_count,
         first_timestamp_ist=first_ts,
         last_timestamp_ist=last_ts,
-        issues=issues,
+        issues=issues[:100],
     )
     return parsed_bars, report
+

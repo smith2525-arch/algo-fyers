@@ -107,9 +107,27 @@ class ControlCenterApiClient:
                 )
             except httpx.RequestError as exc:
                 last_exc = exc
-                if attempt + 1 < max_attempts:
+                # Only retry cold-start connection failures on non-GET requests; never re-POST on ReadTimeout!
+                is_cold_connect_err = isinstance(
+                    exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.RemoteProtocolError)
+                )
+                can_retry = (attempt + 1 < max_attempts) and (
+                    method.upper() == "GET" or is_cold_connect_err
+                )
+                if can_retry:
                     time.sleep(retry_delays[attempt])
                     continue
+                break
+
+        if isinstance(last_exc, httpx.ReadTimeout):
+            return ApiResult(
+                ok=False,
+                status_code=0,
+                data=None,
+                error="Backend request timed out while processing a large dataset (ReadTimeout).",
+                correlation_id=cid,
+                waking_up=False,
+            )
 
         return ApiResult(
             ok=False,
@@ -341,7 +359,12 @@ class ControlCenterApiClient:
         )
 
     def execute_backtest(self, payload: dict[str, Any]) -> ApiResult:
-        return self._request("POST", "/api/v1/backtests", json_body=payload)
+        return self._request(
+            "POST",
+            "/api/v1/backtests",
+            json_body=payload,
+            timeout_override=max(self.timeout, 120.0),
+        )
 
     def list_backtests(
         self,
@@ -361,7 +384,11 @@ class ControlCenterApiClient:
         return self._request("GET", "/api/v1/backtests", params=params)
 
     def get_backtest_detail(self, backtest_id: str) -> ApiResult:
-        return self._request("GET", f"/api/v1/backtests/{backtest_id}")
+        return self._request(
+            "GET",
+            f"/api/v1/backtests/{backtest_id}",
+            timeout_override=max(self.timeout, 60.0),
+        )
 
     def get_replay_catalog(self, *, instrument: str = "NIFTY") -> ApiResult:
         return self._request(
